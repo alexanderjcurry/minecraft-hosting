@@ -5,6 +5,8 @@ import string
 from sqlalchemy.orm import Session
 from .db import get_db
 from .auth import get_current_user
+from .models import Payment
+from .plans import plans
 
 # Load Kubernetes configuration
 config.load_kube_config(config_file="/home/sysadmin/.kube/config")
@@ -39,11 +41,24 @@ def get_next_available_port():
     raise HTTPException(status_code=500, detail="No available NodePorts in the range 30000-32767")
 
 @router.post("/create/")
-async def create_minecraft_server(name: str, memory: str, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+async def create_minecraft_server(name: str, plan_id: str, db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    # Check if the user has an active payment for the selected plan
+    payment = db.query(Payment).filter(Payment.user_id == current_user.id, Payment.plan_id == plan_id, Payment.payment_status == 'paid').first()
+    if not payment:
+        raise HTTPException(status_code=402, detail="Payment required before creating a server.")
+
     try:
+        # Generate a random name for the Minecraft server deployment
         deployment_name = 'minecraft-server-' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=6))
         node_port = get_next_available_port()
 
+        # Set the amount of memory based on the selected plan
+        plan = plans.get(plan_id)
+        if not plan:
+            raise HTTPException(status_code=400, detail="Invalid plan selected.")
+        memory_limit = plan['ram']
+
+        # Create a Kubernetes deployment for the Minecraft server
         deployment = client.V1Deployment(
             metadata=client.V1ObjectMeta(name=deployment_name),
             spec=client.V1DeploymentSpec(
@@ -56,7 +71,11 @@ async def create_minecraft_server(name: str, memory: str, db: Session = Depends(
                             name='minecraft',
                             image='itzg/minecraft-server',
                             ports=[client.V1ContainerPort(container_port=25565)],
-                            env=[client.V1EnvVar(name='EULA', value='TRUE')]
+                            env=[client.V1EnvVar(name='EULA', value='TRUE')],
+                            resources=client.V1ResourceRequirements(
+                                requests={'memory': f'{memory_limit}Gi'},
+                                limits={'memory': f'{memory_limit}Gi'}
+                            )
                         )
                     ])
                 )
@@ -64,6 +83,7 @@ async def create_minecraft_server(name: str, memory: str, db: Session = Depends(
         )
         apps_v1.create_namespaced_deployment(namespace=namespace, body=deployment)
 
+        # Create a service for the Minecraft server
         service = client.V1Service(
             metadata=client.V1ObjectMeta(name=deployment_name, labels={'app': 'minecraft', 'instance': deployment_name}),
             spec=client.V1ServiceSpec(
@@ -76,7 +96,7 @@ async def create_minecraft_server(name: str, memory: str, db: Session = Depends(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
-    
+
     return {"message": f"Server {deployment_name} created successfully with NodePort {node_port}"}
 
 @router.post("/delete/{deployment_name}")
@@ -86,6 +106,6 @@ async def delete_minecraft_server(deployment_name: str):
         core_v1.delete_namespaced_service(name=deployment_name, namespace=namespace)
     except client.exceptions.ApiException as e:
         raise HTTPException(status_code=e.status, detail=f"Error deleting server: {e}")
-    
+
     return {"message": f"Server {deployment_name} deleted successfully"}
 

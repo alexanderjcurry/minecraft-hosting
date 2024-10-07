@@ -32,3 +32,26 @@ async def create_checkout_session(current_user: str = Depends(get_current_user))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/webhook/")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig_header = request.headers.get("Stripe-Signature")
+    endpoint_secret = "your_webhook_secret_here"
+    
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, endpoint_secret
+        )
+    except ValueError as e:
+        # Invalid payload
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError as e:
+        # Invalid signature
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    
+    # Handle the event (you can add more events)
+    if event['type'] == 'checkout.session.completed':
+        print("Payment successful!")
+    
+    return {"status": "success"}
+
