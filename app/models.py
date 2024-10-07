@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
-from .db import Base  # Ensure you import Base from the correct location
+from .db import Base
 from datetime import datetime
 
 class Payment(Base):
@@ -17,3 +17,12 @@ class Payment(Base):
 
     user = relationship("User", back_populates="payments")
 
+class User(Base):
+    __tablename__ = 'users'
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    email = Column(String, unique=True, index=True)
+    password = Column(String)
+
+    payments = relationship("Payment", back_populates="user")

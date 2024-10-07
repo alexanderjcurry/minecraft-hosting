@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 import stripe
-from models import User, Payment
+from .models import User, Payment
 from auth import get_current_user
 from config import STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 from plans import plans
@@ -69,7 +69,7 @@ async def handle_checkout_session(session):
     user_id = session['metadata']['user_id']
     plan_id = session['metadata']['plan_id']
 
-    # Fetch user and record payment (adjust to your ORM)
+    # Fetch user and record payment
     user = await User.get(id=user_id)
     payment = Payment(user_id=user_id, plan_id=plan_id, amount=session['amount_total'] / 100, currency=session['currency'], payment_status='paid', stripe_session_id=session['id'])
     await payment.save()
