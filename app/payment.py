@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 import stripe
 from .models import User, Payment
-from auth import get_current_user
-from config import STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
-from plans import plans
+from .auth import get_current_user
+from .config import STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+from .plans import plans
 
 stripe.api_key = STRIPE_SECRET_KEY
 router = APIRouter()
