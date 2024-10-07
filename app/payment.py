@@ -13,9 +13,14 @@ router = APIRouter()
 async def create_checkout_session(plan_id: str, request: Request, user: User = Depends(get_current_user)):
     if plan_id not in plans:
         raise HTTPException(status_code=400, detail="Invalid plan ID.")
-    
+
     plan = plans[plan_id]
+
+    # Log the selected plan and price ID for debugging
+    print(f"Creating checkout session for plan: {plan_id}, price_id: {plan['price_id']}")
+
     try:
+        # Creating the Stripe checkout session in subscription mode
         checkout_session = stripe.checkout.Session.create(
             customer_email=user.email,
             payment_method_types=['card'],
@@ -25,16 +30,22 @@ async def create_checkout_session(plan_id: str, request: Request, user: User = D
                     'quantity': 1,
                 },
             ],
-            mode='payment',
-            success_url=request.url_for('payment_success') + '?session_id={CHECKOUT_SESSION_ID}',
-            cancel_url=request.url_for('payment_cancel'),
+            mode='subscription',  # Switch to subscription mode for recurring payments
+            success_url=str(request.url_for('payment_success')) + '?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url=str(request.url_for('payment_cancel')),
             metadata={
                 'user_id': str(user.id),
                 'plan_id': plan_id,
             },
         )
+        # Log the session ID for debugging
+        print(f"Checkout session created: {checkout_session['id']}")
+
         return {"sessionId": checkout_session['id']}
+
     except Exception as e:
+        # Log the exception to the server for debugging
+        print(f"Error creating checkout session: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get('/payment-success')
